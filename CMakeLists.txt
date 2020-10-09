@@ -10,8 +10,6 @@ SET(PROJECT_DESCRIPTION "API to define and store Contact phases and Contact Sequ
 SET(PROJECT_URL "https://github.com/${PROJECT_ORG}/${PROJECT_NAME}")
 
 # Project options
-OPTION(BUILD_PYTHON_INTERFACE "Build the python bindings" ON)
-OPTION(INSTALL_PYTHON_INTERFACE_ONLY "Install *ONLY* the python bindings" OFF)
 OPTION(SUFFIX_SO_VERSION "Suffix library name with its version" ON)
 
 # Project configuration
@@ -32,30 +30,75 @@ INCLUDE(cmake/ide.cmake)
 # Project definition
 COMPUTE_PROJECT_ARGS(PROJECT_ARGS LANGUAGES CXX)
 PROJECT(${PROJECT_NAME} ${PROJECT_ARGS})
-SET(CMAKE_CXX_STANDARD 11)
+CHECK_MINIMAL_CXX_STANDARD(11 ENFORCE)
 
 # Project dependencies
-ADD_PROJECT_DEPENDENCY(pinocchio REQUIRED PKG_CONFIG_REQUIRES "pinocchio >= 2.0.0")
-ADD_PROJECT_DEPENDENCY(curves 0.5.1 REQUIRED PKG_CONFIG_REQUIRES "curves >= 0.5.1")
+ADD_PROJECT_DEPENDENCY(pinocchio REQUIRED)
+ADD_PROJECT_DEPENDENCY(curves 0.5.1 REQUIRED)
+ADD_PROJECT_DEPENDENCY(Boost REQUIRED COMPONENTS serialization)
 IF(NOT CURVES_WITH_PINOCCHIO_SUPPORT)
   MESSAGE(FATAL_ERROR "you need to use a curves version compiled with pinocchio support")
 ENDIF(NOT CURVES_WITH_PINOCCHIO_SUPPORT)
-SET(BOOST_COMPONENTS unit_test_framework serialization)
+IF(BUILD_TESTING)
+  FIND_PACKAGE(Boost REQUIRED COMPONENTS unit_test_framework)
+ENDIF(BUILD_TESTING)
 
 IF(BUILD_PYTHON_INTERFACE)
   FINDPYTHON()
+  SEARCH_FOR_BOOST_PYTHON(REQUIRED)
   STRING(REGEX REPLACE "-" "_" PY_NAME ${CUSTOM_HEADER_DIR})
-  ADD_PROJECT_DEPENDENCY(eigenpy REQUIRED PKG_CONFIG_REQUIRES "eigenpy >= 1.6.12")
-  SET(BOOST_COMPONENTS ${BOOST_COMPONENTS} python)
-  INCLUDE_DIRECTORIES(SYSTEM ${PYTHON_INCLUDE_DIRS})
+  ADD_PROJECT_DEPENDENCY(eigenpy REQUIRED COMPONENTS "eigenpy${PYTHON_COMPONENT}")
   STRING(REGEX REPLACE "-" "_" PY_NAME ${PROJECT_NAME})
   SET(${PY_NAME}_INSTALL_DIR ${PYTHON_SITELIB}/${PY_NAME})
 ENDIF(BUILD_PYTHON_INTERFACE)
 
-SEARCH_FOR_BOOST()
-INCLUDE_DIRECTORIES(SYSTEM ${Boost_INCLUDE_DIRS})
-
 # Main Library
+SET(${PROJECT_NAME}_GEOMETRY_HEADERS
+  include/${PROJECT_NAME}/geometry/curve-map.hpp
+  include/${PROJECT_NAME}/geometry/ellipsoid.hpp
+  include/${PROJECT_NAME}/geometry/fwd.hpp
+  include/${PROJECT_NAME}/geometry/linear-cone.hpp
+  include/${PROJECT_NAME}/geometry/second-order-cone.hpp
+  )
+
+SET(${PROJECT_NAME}_SERIALIZATION_HEADERS
+  include/${PROJECT_NAME}/serialization/aligned-vector.hpp
+  include/${PROJECT_NAME}/serialization/archive.hpp
+  include/${PROJECT_NAME}/serialization/eigen-matrix.hpp
+  include/${PROJECT_NAME}/serialization/spatial.hpp
+  )
+
+SET(${PROJECT_NAME}_SCENARIO_HEADERS
+  include/${PROJECT_NAME}/scenario/contact-model.hpp
+  include/${PROJECT_NAME}/scenario/contact-patch.hpp
+  include/${PROJECT_NAME}/scenario/contact-phase.hpp
+  include/${PROJECT_NAME}/scenario/contact-sequence.hpp
+  include/${PROJECT_NAME}/scenario/fwd.hpp
+  )
+
+
+SET(${PROJECT_NAME}_PYTHON_HEADERS
+  ${CMAKE_SOURCE_DIR}/include/${PROJECT_NAME}/bindings/python/geometry/ellipsoid.hpp
+  ${CMAKE_SOURCE_DIR}/include/${PROJECT_NAME}/bindings/python/geometry/expose-geometry.hpp
+  ${CMAKE_SOURCE_DIR}/include/${PROJECT_NAME}/bindings/python/geometry/linear-cone.hpp
+  ${CMAKE_SOURCE_DIR}/include/${PROJECT_NAME}/bindings/python/geometry/second-order-cone.hpp
+  ${CMAKE_SOURCE_DIR}/include/${PROJECT_NAME}/bindings/python/serialization/archive.hpp
+  ${CMAKE_SOURCE_DIR}/include/${PROJECT_NAME}/bindings/python/scenario/contact-model.hpp
+  ${CMAKE_SOURCE_DIR}/include/${PROJECT_NAME}/bindings/python/scenario/contact-patch.hpp
+  ${CMAKE_SOURCE_DIR}/include/${PROJECT_NAME}/bindings/python/scenario/contact-phase.hpp
+  ${CMAKE_SOURCE_DIR}/include/${PROJECT_NAME}/bindings/python/scenario/contact-sequence.hpp
+  ${CMAKE_SOURCE_DIR}/include/${PROJECT_NAME}/bindings/python/scenario/expose-scenario.hpp
+  ${CMAKE_SOURCE_DIR}/include/${PROJECT_NAME}/bindings/python/utils/printable.hpp
+  )
+
+SET(${PROJECT_NAME}_HEADERS
+  ${${PROJECT_NAME}_GEOMETRY_HEADERS}
+  ${${PROJECT_NAME}_SERIALIZATION_HEADERS}
+  ${${PROJECT_NAME}_SCENARIO_HEADERS}
+  ${${PROJECT_NAME}_PYTHON_HEADERS}
+  )
+
+ADD_HEADER_GROUP(${${PROJECT_NAME}_HEADERS})
 
 ADD_LIBRARY(${PROJECT_NAME} INTERFACE)
 TARGET_INCLUDE_DIRECTORIES(${PROJECT_NAME} INTERFACE $<INSTALL_INTERFACE:include>)
@@ -65,10 +108,9 @@ IF(NOT INSTALL_PYTHON_INTERFACE_ONLY)
   INSTALL(TARGETS ${PROJECT_NAME} EXPORT ${TARGETS_EXPORT_NAME} DESTINATION lib)
 ENDIF(NOT INSTALL_PYTHON_INTERFACE_ONLY)
 
-IF(NOT INSTALL_PYTHON_INTERFACE_ONLY)
-  ADD_SUBDIRECTORY(include/${CUSTOM_HEADER_DIR})
-ENDIF(NOT INSTALL_PYTHON_INTERFACE_ONLY)
 ADD_SUBDIRECTORY(bindings)
-ADD_SUBDIRECTORY(unittest)
+IF(BUILD_TESTING)
+  ADD_SUBDIRECTORY(unittest)
+ENDIF(BUILD_TESTING)
 
 PKG_CONFIG_APPEND_BOOST_LIBS(serialization)
